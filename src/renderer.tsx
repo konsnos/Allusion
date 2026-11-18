@@ -26,7 +26,7 @@ import RootStore from './frontend/stores/RootStore';
 import { PREFERENCES_STORAGE_KEY } from './frontend/stores/UiStore';
 import BackupScheduler from './backend/backup-scheduler';
 import path from 'path';
-import { DB_NAME } from './backend/config';
+import { DB_NAME, getDatabaseDirectory } from 'common/database-location';
 import fse from 'fs-extra';
 import { USE_BACKEND_AS_WORKER } from 'src/backend/config';
 import { BackendService } from 'src/frontend/workers/BackendService';
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
   root.render(<SplashScreen />);
 
   const basePath = await RendererMessenger.getPath('userData');
-  const databaseDirectory = path.join(basePath, 'databases');
+  const databaseDirectory = getDatabaseDirectory(basePath);
   const databaseFilePath = path.join(databaseDirectory, `${DB_NAME}.sqlite`);
 
   if (!IS_PREVIEW_WINDOW) {

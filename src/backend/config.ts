@@ -1,9 +1,7 @@
 import { Kysely, Migrator, Migration, MigrationProvider, Logger, LogEvent } from 'kysely';
 import { AllusionDB_SQL } from './schemaTypes';
 
-export const DB_NAME = 'Allusion';
-
-export const DB_TO_IMPORT_NAME = 'DB_TO_IMPORT';
+export { DB_NAME, DB_TO_IMPORT_NAME } from '../../common/database-location';
 
 export const NUM_AUTO_BACKUPS = 6;
 

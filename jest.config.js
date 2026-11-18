@@ -1,6 +1,10 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  transform: {
+    // Default imports of CommonJS modules (`import fse from 'fs-extra'`), as webpack allows them.
+    '^.+\\.tsx?$': ['ts-jest', { tsconfig: { esModuleInterop: true } }],
+  },
   setupFiles: [
     // FIXME: I did not manage to get Dexie working in an actual Electron test environment. Testing in JavaScript is
     // cursed, so indexeddb is replaced by an in-memory implementation.

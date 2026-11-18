@@ -20,6 +20,7 @@ import AppIcon from '../resources/logo/png/full-color/allusion-logomark-fc-512x5
 import TrayIconMac from '../resources/logo/png/black/allusionTemplate@2x.png'; // filename convention: https://www.electronjs.org/docs/api/native-image#template-image
 import ClipServer, { IImportItem } from './clipper/server';
 import { createBugReport, githubUrl } from '../common/config';
+import { getDatabaseDirectory, migrateLegacyDatabaseDirectory } from '../common/database-location';
 import { IS_DEV, IS_MAC } from '../common/process';
 import { TagDTO, ROOT_TAG_ID } from './api/tag';
 import { MainMessenger } from './ipc/main';
@@ -447,6 +448,9 @@ const HAS_INSTANCE_LOCK = app.requestSingleInstanceLock();
 if (!HAS_INSTANCE_LOCK) {
   console.log('Another instance of Allusion is already running');
   app.quit();
+} else if (!moveDatabaseOutOfLegacyDirectory()) {
+  // Starting anyway would let Chromium delete the database, see moveDatabaseOutOfLegacyDirectory.
+  app.exit(1);
 } else {
   app.on('second-instance', () => {
     // Someone tried to run a second instance, we should focus our window.
@@ -874,6 +878,34 @@ function saveWindowState() {
 function forceRelaunch() {
   app.relaunch();
   app.exit();
+}
+
+/**
+ * Moves the database out of `<userData>/databases`, which Chromium deletes on startup since
+ * Electron 32. Must run before the app is ready, and only in the instance that holds the single
+ * instance lock, since another instance may have the database open.
+ * Returns false when the database could not be moved.
+ */
+function moveDatabaseOutOfLegacyDirectory(): boolean {
+  try {
+    const { moved, setAsideDirectory } = migrateLegacyDatabaseDirectory(basePath);
+    if (moved.length > 0) {
+      console.log(`Moved database files to ${getDatabaseDirectory(basePath)}:`, moved.join(', '));
+    }
+    if (setAsideDirectory !== undefined) {
+      console.warn(`Kept conflicting database files in ${setAsideDirectory}`);
+    }
+    return true;
+  } catch (e) {
+    console.error('Could not move the database to its new location', e);
+    dialog.showErrorBox(
+      'Allusion could not start',
+      `Allusion could not move its database to ${getDatabaseDirectory(basePath)}:\n${e}\n\n` +
+        `Your library is still in ${path.join(basePath, 'databases')}. ` +
+        'Make a copy of that folder before starting Allusion again.',
+    );
+    return false;
+  }
 }
 
 function getVersion(): string {
