@@ -14,13 +14,11 @@ const executeCommand = (command) => {
   }
 };
 
-// Function to increment the version
+// Suggests the next patch version, keeping the suffix: 1.14.0-konsnos -> 1.14.1-konsnos
 const incrementVersion = (version) => {
-  const [vPartVersion, vPartRC, ...vPartRest] = version.split('-');
-  const [rcText, rcVersion, ...rcRest] = vPartRC.split('.');
-  const newRCVersion = parseInt(rcVersion) + 1;
-  const rcString = `${rcText}.${newRCVersion}${rcRest.length ? `.${rcRest.join('.')}` : ''}`;
-  return `${vPartVersion}-${rcString}-${vPartRest.join('.')}`;
+  const [numbers, ...suffix] = version.split('-');
+  const [major, minor, patch] = numbers.split('.').map(Number);
+  return [`${major}.${minor}.${patch + 1}`, ...suffix].join('-');
 };
 
 // Function to prompt user for input
