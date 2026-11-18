@@ -1,15 +1,39 @@
-import Backend from '../src/backend/_deprecated/backend';
-import { dbInit } from '../src/backend/_deprecated/config';
+import fse from 'fs-extra';
+import os from 'os';
+import path from 'path';
+import Backend from '../src/backend/backend';
 import TagStore from '../src/frontend/stores/TagStore';
 
+// The toasts need a browser window and the stylesheets webpack bundles.
+jest.mock('../src/frontend/components/Toaster', () => ({ AppToaster: { show: jest.fn() } }));
+
 describe('TagStore', () => {
-  let TEST_DATABASE_ID_COUNTER = 0;
+  const root = fse.mkdtempSync(path.join(os.tmpdir(), 'allusion-tag-store-'));
+  let databaseCount = 0;
+
+  beforeAll(() => {
+    jest.spyOn(console, 'info').mockImplementation(() => {});
+    jest.spyOn(console, 'debug').mockImplementation(() => {});
+  });
+
+  afterAll(() => {
+    jest.restoreAllMocks();
+    // The databases stay open (Backend can't be closed), which Windows doesn't allow to delete.
+    fse.remove(root).catch(() => {});
+  });
 
   function test(name: string, test: (store: TagStore) => Promise<void>) {
     it(name, async () => {
-      const db = dbInit(`Test_${TEST_DATABASE_ID_COUNTER++}`);
-      const backend = await Backend.init(db, () => {});
-      const store = new TagStore(backend as any, {} as any);
+      const dbPath = path.join(root, `${databaseCount++}`, 'Allusion.sqlite');
+      await fse.ensureFile(dbPath);
+      const backend = new Backend();
+      await backend.init(
+        dbPath,
+        undefined,
+        () => {},
+        async () => {},
+      );
+      const store = new TagStore(backend, {} as any);
       await store.init();
       await test(store);
       // FIXME: That is kind of our fault for automatically making backend calls in MobX reactions.
