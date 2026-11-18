@@ -53,22 +53,6 @@ export function isFileExtensionVideo(
   return (VideoExtensions as readonly IMG_EXTENSIONS_TYPE[]).includes(fileExtension);
 }
 
-const NativeImageCompatibleExtensions = [
-  'png',
-  'jpg',
-  'jpeg',
-  'jfif',
-] as const satisfies readonly IMG_EXTENSIONS_TYPE[];
-export type NativeImageCompatibleExtensionsType = (typeof NativeImageCompatibleExtensions)[number];
-
-export function isNativeImageCompatible(
-  fileExtension: IMG_EXTENSIONS_TYPE,
-): fileExtension is NativeImageCompatibleExtensionsType {
-  return (NativeImageCompatibleExtensions as readonly IMG_EXTENSIONS_TYPE[]).includes(
-    fileExtension,
-  );
-}
-
 function hashString(s: string) {
   let hash = 0;
   let chr = 0;

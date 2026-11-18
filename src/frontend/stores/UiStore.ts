@@ -1,10 +1,10 @@
-import { clipboard, nativeImage, shell } from 'electron';
+import { shell } from 'electron';
 import fse from 'fs-extra';
 import { action, computed, makeObservable, observable, reaction } from 'mobx';
 
 import { maxNumberOfExternalFilesBeforeWarning } from 'common/config';
 import { clamp } from 'common/core';
-import { encodeFilePath, isNativeImageCompatible } from 'common/fs';
+import { encodeFilePath } from 'common/fs';
 import { generateId, ID } from '../../api/id';
 import { SearchCriteria } from '../../api/search-criteria';
 import { RendererMessenger } from '../../ipc/renderer';
@@ -643,63 +643,54 @@ class UiStore {
       return;
     }
     const copyToastKey = 'copy-toast';
+    AppToaster.show({ message: 'Copying image to clipboard...', timeout: 60000 }, copyToastKey);
 
+    // Write right away while the window has focus, as the clipboard rejects writes from unfocused
+    // windows: loading the image takes a while, during which the user may switch to another app.
+    const png = this.loadImageAsPng(file);
     try {
-      AppToaster.show({ message: 'Copying image to clipboard...', timeout: 60000 }, copyToastKey);
-      const src = await this.rootStore.imageLoader.getImageSrc(file);
-      if (src !== undefined) {
-        let buffer: Buffer;
-        if (isNativeImageCompatible(file.extension)) {
-          // read image from file system
-          buffer = await fse.readFile(src);
-        } else if (src.startsWith('blob:')) {
-          // use blob data
-          const blob = await fetch(src).then((r) => r.blob());
-          buffer = Buffer.from(await blob.arrayBuffer());
-        } else {
-          // try to convert into compatible type using canvas.
-          const image = new Image();
-          image.src = encodeFilePath(src);
-          await new Promise<void>((resolve, reject) => {
-            image.onload = () => resolve();
-            image.onerror = () => reject(new Error('Failed to load image for canvas.'));
-          });
-          const canvas = new OffscreenCanvas(image.width, image.height);
-          const ctx2D = canvas.getContext('2d');
-          if (!ctx2D) {
-            throw new Error('Context2D not available!');
-          }
-          ctx2D.drawImage(image, 0, 0);
-          const blob = await canvas.convertToBlob({ type: 'image/png' });
-          buffer = Buffer.from(await blob.arrayBuffer());
-        }
-        const natImage = nativeImage.createFromBuffer(buffer);
-        if (natImage.isEmpty()) {
-          throw new Error('Could not load nativeImage');
-        }
-        clipboard.writeImage(natImage);
-        AppToaster.show(
-          { type: 'success', message: 'Image copied to clipboard.', timeout: 2000 },
-          copyToastKey,
-        );
-      } else {
-        AppToaster.show(
-          {
-            type: 'error',
-            message: 'Failed to copy image to clipboard. (Extension is not supported.)',
-            timeout: 4000,
-          },
-          copyToastKey,
-        );
-        throw new Error('Failed to get image data. (Extension is not supported.)');
-      }
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+      AppToaster.show(
+        { type: 'success', message: 'Image copied to clipboard.', timeout: 2000 },
+        copyToastKey,
+      );
     } catch (e) {
       AppToaster.show(
         { type: 'error', message: 'Failed to copy image to clipboard.', timeout: 4000 },
         copyToastKey,
       );
-      console.error('Could not copy image to clipboard', e);
+      // Log why the image could not be loaded, rather than the generic clipboard error.
+      const error = await png.then(
+        () => e,
+        (loadError) => loadError,
+      );
+      console.error('Could not copy image to clipboard', error);
     }
+  }
+
+  /** Loads the image as PNG, the only image format the clipboard accepts. */
+  private async loadImageAsPng(file: ClientFile): Promise<Blob> {
+    const src = await this.rootStore.imageLoader.getImageSrc(file);
+    if (src === undefined) {
+      throw new Error('Failed to get image data. (Extension is not supported.)');
+    }
+    if (file.extension === 'png' && !src.startsWith('blob:')) {
+      return new Blob([new Uint8Array(await fse.readFile(src))], { type: 'image/png' });
+    }
+    // Convert other formats using a canvas (encodeFilePath leaves blob URLs as they are).
+    const image = new Image();
+    image.src = encodeFilePath(src);
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('Failed to load image for canvas.'));
+    });
+    const canvas = new OffscreenCanvas(image.width, image.height);
+    const ctx2D = canvas.getContext('2d');
+    if (!ctx2D) {
+      throw new Error('Context2D not available!');
+    }
+    ctx2D.drawImage(image, 0, 0);
+    return canvas.convertToBlob({ type: 'image/png' });
   }
 
   @action.bound openExternal(warnIfTooManyFiles: boolean = true): void {
@@ -1041,7 +1032,9 @@ class UiStore {
       .flatMap((tags) => tags)
       .map((tag) => tag.name)
       .join(', ');
-    clipboard.writeText(allTagNames);
+    navigator.clipboard
+      .writeText(allTagNames)
+      .catch((e) => console.error('Could not copy tags to clipboard', e));
     AppToaster.show({
       message: `Copied tags from ${this.tagClipboard.length} files.`,
       timeout: 3000,
