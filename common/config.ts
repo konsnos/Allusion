@@ -3,7 +3,8 @@ import os from 'os';
 // Randomly chosen, hopefully no conflicts with other apps/services
 export const SERVER_PORT = 5454;
 
-export const githubUrl = 'https://github.com/RafaUC/Allusion';
+// Also update `repository` in package.json (where releases are published) and dev-app-update.yml
+export const githubUrl = 'https://github.com/konsnos/Allusion';
 
 export const chromeExtensionUrl =
   'https://chrome.google.com/webstore/detail/allusion-web-clipper/gjceheijjnmdfcolopodbopfoaicobna';

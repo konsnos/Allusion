@@ -37,7 +37,7 @@ Allusion is a tool built for artists, aimed to help you organize your **Visual L
 ## Installation
 
 
-Find the latest version of Allusion on the [Releases](https://github.com/RafaUC/Allusion/releases) page.
+Find the latest version of Allusion on the [Releases](https://github.com/konsnos/Allusion/releases) page.
 
 
 ## Development

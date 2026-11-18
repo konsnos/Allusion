@@ -91,14 +91,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RafaUC/Allusion.git"
+    "url": "git+https://github.com/konsnos/Allusion.git"
   },
   "author": "Allusion-App",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/RafaUC/Allusion/issues"
+    "url": "https://github.com/konsnos/Allusion/issues"
   },
-  "homepage": "https://github.com/RafaUC/Allusion/Allusion#readme",
+  "homepage": "https://github.com/konsnos/Allusion#readme",
   "engines": {
     "node": ">=22.14"
   },
