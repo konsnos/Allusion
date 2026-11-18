@@ -1,30 +1,13 @@
 <img alt="Allusion" src="./screenshot.jpg"/>
 
-Fork of [Allusion](https://github.com/allusion-app/Allusion/) with:
-- Video support.
-  - Video and GIF playback options.
-- Bulk tagging.
-- Implied tag relationships.
-  - Automatic inheritance of implied tags.
-  - Fully compatible with advanced search.
-- Extra Properties.
-  - Allows you to define extra properties for files.
-  - Sort files by their extra property values.
-  - Use those extra properties in advanced searches.
-- Quality of life improvements.
-  - Refresh hotkey.
-  - Fixed weird behavior in the tags tree when dragging/dropping or expanding items.
-  - Versatile tag selection in the tags tree using and combining modifier keys.
-    - Hold Alt to select whole tag collections (a tag and its sub-tags); otherwise, only select visible tags.
-    - Hold Command/Control to enable additive/subtractive selection.
-    - Hold Shift to enable selecting multiple items in range.
-  - Improved thumbnail updates when files change.
-  - Retry thumbnail generation when it takes too long.
-  - Tag editor can be moved to the side in the main gallery.
-  - Find tags using the contextual menu in the tag editor.
-  - Adjustable padding for thumbnails in the gallery.
-  - Multiple optimizations and bug fixes.
-  - And more, see the changelogs in the releases page for more details.
+Fork of [RafaUC/Allusion](https://github.com/RafaUC/Allusion), itself a fork of [Allusion](https://github.com/allusion-app/Allusion/), with upgraded packages:
+- Electron 21 → 45 (Chromium 156, Node.js 24).
+- electron-builder 23 → 26 and electron-updater 5 → 6.
+- better-sqlite3 9.6 → 13, with prebuilt binaries that no longer need rebuilding for each Electron version.
+- TypeScript 4.9 → 5.9.
+- Updated GitHub Actions workflows.
+
+Allusion now runs on 64-bit Windows 10 or later, macOS 13 or later, and 64-bit Linux. On first start, it moves the library database from the `databases` folder to `allusion-db` in its data folder.
         
 Thanks to the developers and the community for your hard work! ❤️
 
