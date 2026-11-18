@@ -63,20 +63,6 @@ function initialize() {
     callback({});
   });
 
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    if (details.responseHeaders === undefined) {
-      callback({});
-    } else {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Cross-Origin-Opener-Policy': ['same-origin'],
-          'Cross-Origin-Embedder-Policy': ['require-corp'],
-        },
-      });
-    }
-  });
-
   createWindow();
   // TODO: During DB backup import, initializing a second window at the same time
   // will access the database and prevent the DB file from being removed when
@@ -255,7 +241,8 @@ function createWindow() {
       {
         label: 'Refresh',
         accelerator: 'F5',
-        click: (_, win) => (win ? MainMessenger.f5Reload(win.webContents, true) : undefined),
+        click: (_, win) =>
+          win instanceof BrowserWindow ? MainMessenger.f5Reload(win.webContents, true) : undefined,
       },
       { role: 'toggleDevTools' },
       { type: 'separator' },
@@ -263,7 +250,7 @@ function createWindow() {
         label: 'Actual Size',
         accelerator: 'CommandOrControl+0',
         click: (_, browserWindow) => {
-          if (browserWindow) {
+          if (browserWindow instanceof BrowserWindow) {
             MainMessenger.setZoomFactor(browserWindow.webContents, 1);
           }
         },
@@ -273,7 +260,7 @@ function createWindow() {
         // TODO: Fix by using custom solution...
         accelerator: 'CommandOrControl+=',
         click: (_, browserWindow) => {
-          if (browserWindow !== undefined) {
+          if (browserWindow instanceof BrowserWindow) {
             MainMessenger.setZoomFactor(
               browserWindow.webContents,
               Math.min(browserWindow.webContents.zoomFactor + 0.1, MAX_ZOOM_FACTOR),
@@ -285,7 +272,7 @@ function createWindow() {
         label: 'Zoom Out',
         accelerator: 'CommandOrControl+-',
         click: (_, browserWindow) => {
-          if (browserWindow !== undefined) {
+          if (browserWindow instanceof BrowserWindow) {
             MainMessenger.setZoomFactor(
               browserWindow.webContents,
               Math.max(browserWindow.webContents.zoomFactor - 0.1, MIN_ZOOM_FACTOR),
@@ -470,6 +457,9 @@ if (!HAS_INSTANCE_LOCK) {
   });
   // Enable manual garbage collector
   app.commandLine.appendSwitch('js-flags', '--expose-gc');
+  // The masonry layout shares WebAssembly memory with its worker. Chromium only allows that in
+  // cross-origin isolated pages, and pages loaded from file:// aren't isolated.
+  app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer');
 
   // Only initialize window if no other instance is already running:
   // This method will be called when Electron has finished
@@ -789,7 +779,11 @@ MainMessenger.onIsMaximized(() => mainWindow?.isMaximized() ?? false);
 
 MainMessenger.onGetVersion(getVersion);
 
-MainMessenger.onCheckForUpdates(() => autoUpdater.checkForUpdates());
+// The update check result can't be sent to the renderer (it may hold a promise): the outcome is
+// reported through the autoUpdater events instead.
+MainMessenger.onCheckForUpdates(async () => {
+  await autoUpdater.checkForUpdates();
+});
 
 MainMessenger.onToggleCheckUpdatesOnStartup(() => {
   updatePreferences({

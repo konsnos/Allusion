@@ -1,6 +1,5 @@
-import fse from 'fs-extra';
+import { webUtils } from 'electron';
 import { action } from 'mobx';
-import path from 'path';
 
 import { retainArray } from 'common/core';
 import { timeoutPromise } from 'common/timeout';
@@ -20,12 +19,11 @@ export const isAcceptableType = (e: React.DragEvent) =>
 /** Returns the IDs of the files that match those in Allusion given dropData. Returns false if one or files has no matches */
 export const findDroppedFileMatches = action(
   (dropData: (File | string)[], fs: FileStore): ClientFile[] | false => {
-    const matches = dropData.map(
-      (file) =>
-        typeof file !== 'string' &&
-        file.path &&
-        fs.fileList.find((f) => f && f.absolutePath === file.path),
-    );
+    const matches = dropData.map((file) => {
+      // Empty for files that are not on disk
+      const filePath = typeof file !== 'string' && webUtils.getPathForFile(file);
+      return filePath && fs.fileList.find((f) => f && f.absolutePath === filePath);
+    });
     return matches.every((m): m is ClientFile => m instanceof ClientFile) ? matches : false;
   },
 );
@@ -66,11 +64,10 @@ export async function storeDroppedImage(dropData: (string | File)[], directory: 
 
     // Store file -> detected by watching the directory -> automatically imported
     if (dataItem instanceof File) {
-      const buffer = dataItem.path ? await fse.readFile(dataItem.path) : dataItem;
       fileData = {
         directory,
-        filenameWithExt: path.basename(dataItem.path),
-        imgBase64: buffer.toString('base64'),
+        filenameWithExt: dataItem.name,
+        imgBase64: Buffer.from(await dataItem.arrayBuffer()).toString('base64'),
       };
     } else if (typeof dataItem === 'string') {
       // It's probably a URL, so we can download it to get the image data

@@ -44,7 +44,7 @@ Find the latest version of Allusion on the [Releases](https://github.com/RafaUC/
 
 ### Quick Start
 
-You need to have [NodeJS](https://nodejs.org/en/download/) and a package manager such as [Yarn](https://yarnpkg.com/lang/en/docs/install/) installed.
+You need to have [NodeJS](https://nodejs.org/en/download/) 22.14 or later and a package manager such as [Yarn](https://yarnpkg.com/lang/en/docs/install/) installed.
 Then run the following commands to get started:
 
 1. Run `yarn install` to install or update all necessary dependencies.
