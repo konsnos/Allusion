@@ -1,6 +1,8 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  // Resolve the non-relative imports (`src/...`, `common/...`) that webpack resolves through aliases.
+  modulePaths: ['<rootDir>'],
   transform: {
     // Default imports of CommonJS modules (`import fse from 'fs-extra'`), as webpack allows them.
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: { esModuleInterop: true } }],
