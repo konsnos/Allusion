@@ -168,6 +168,10 @@ function createWindow() {
         title: `${WINDOW_TITLES[frameName]} • Allusion`,
         frame: true,
         titleBarStyle: 'default',
+        // The main window renders into these windows through the handle returned by window.open
+        // (see PopupWindow). Since Electron 45, popups of unsandboxed windows are sandboxed in a
+        // separate process unless sandboxing is disabled, and window.open then returns null.
+        webPreferences: { sandbox: false },
       },
     };
   });
