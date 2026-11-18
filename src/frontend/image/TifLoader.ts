@@ -17,7 +17,7 @@ class TifLoader implements Loader {
    * Based on: https://github.com/photopea/UTIF.js/blob/master/UTIF.js#L1119
    * @param buffer Image buffer (e.g. from fse.readFile)
    */
-  decode(buffer: ArrayBuffer): Promise<ImageData> {
+  decode(buffer: Buffer): Promise<ImageData> {
     const ifds = UTIF.decode(buffer);
     const vsns = ifds[0].subIFD ? ifds.concat(ifds[0].subIFD as any) : ifds;
 
@@ -39,9 +39,11 @@ class TifLoader implements Loader {
     }
 
     (UTIF.decodeImage as any)(buffer, page);
+    // toRGBA8 allocates a regular (not shared) ArrayBuffer for the pixels.
     const rgba = UTIF.toRGBA8(page);
+    const pixels = new Uint8ClampedArray(rgba.buffer as ArrayBuffer);
     const { width, height } = page;
-    return Promise.resolve(new ImageData(new Uint8ClampedArray(rgba.buffer), width, height));
+    return Promise.resolve(new ImageData(pixels, width, height));
   }
 }
 

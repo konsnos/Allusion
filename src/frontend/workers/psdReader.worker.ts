@@ -31,13 +31,14 @@ export class PsdReaderWorker {
     return canvas as unknown as HTMLCanvasElement;
   }
 
-  async readImage(data: Buffer) {
+  // The Buffer read by PSDLoader arrives as a plain Uint8Array, cloned into a new (not shared) ArrayBuffer.
+  async readImage(data: Uint8Array) {
     // TODO: Could also read files here if passing in the path: const data = await fse.readFile(absolutePath);
 
     // skipping thumbnail and layer images here so we don't have to clear and convert them all
     // before posting data back
     // TODO: look into using the skipThumbnail: false option for faster thumbnail extraction
-    const psd = readPsd(data, {
+    const psd = readPsd(data as Uint8Array<ArrayBuffer>, {
       skipLayerImageData: true,
       skipThumbnail: true,
       useImageData: true,
