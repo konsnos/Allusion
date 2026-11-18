@@ -25,14 +25,8 @@ const About = observer(() => {
           This application was made by a small team of individuals who gathered due to common
           interest in art, design and software.
           <br />
-          It&apos;s completely <b>free and open source</b>! Find out more at
+          It&apos;s completely <b>free and open source</b>!
         </p>
-        <span>
-          <ExternalLink url="https://allusion-app.github.io/">allusion-app.github.io</ExternalLink>.
-        </span>
-        <ul>
-          <li>General information</li>
-        </ul>
         <ExternalLink url={githubUrl}>{githubUrl.replace('https://', '')}</ExternalLink>
         <ul>
           <li>Download the latest version</li>
