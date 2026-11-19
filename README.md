@@ -7,11 +7,13 @@ Fork of [RafaUC/Allusion](https://github.com/RafaUC/Allusion), itself a fork of 
 - TypeScript 4.9 → 5.9.
 - Updated GitHub Actions workflows.
 
+Additional improvements
+
+- Adding a location is much faster. Reading image dimensions takes about 1.3 ms per file instead of 29 ms, so a folder of 60,000 images (34.5 GB) loads in a couple of minutes instead of about half an hour.
+
+- Thumbnails appear sooner. A screen of 81 large PNGs gets its thumbnails in about 20 seconds instead of 27.
+
 Allusion now runs on 64-bit Windows 10 or later, macOS 13 or later, and 64-bit Linux. On first start, it moves the library database from the `databases` folder to `allusion-db` in its data folder.
-
-Adding a location is also much faster. Reading image dimensions takes about 1.3 ms per file instead of 29 ms, so a folder of 60,000 images (34.5 GB) loads in a couple of minutes instead of about half an hour.
-
-Thumbnails appear sooner too. A screen of 81 large PNGs gets its thumbnails in about 20 seconds instead of 27, images scrolled out of view no longer hold up the ones on screen, and small images are no longer re-checked hundreds of times a second while they are visible.
         
 Thanks to the developers and the community for your hard work! ❤️
 
