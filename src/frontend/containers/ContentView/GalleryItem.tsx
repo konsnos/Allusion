@@ -140,7 +140,7 @@ export const Thumbnail = observer(
       mounted,
       thumbnailPath, // dependency to re-execute
       uiStore.isList || (!forceNoThumbnail && !isPlaying),
-      async (file, isBroken, mounted, thumbnailPath, useThumbnail) => {
+      async (file, isBroken, mounted, thumbnailPath, useThumbnail, signal) => {
         // If it is broken, only show thumbnail if it exists.
         if (!mounted || isBroken === true) {
           // fse.pathExists doesn't work if the path have url parameters
@@ -152,8 +152,9 @@ export const Thumbnail = observer(
         }
 
         if (useThumbnail) {
-          //this line will throw an exception if the thumbnail generation gets rejected / throw
-          await imageLoader.ensureThumbnail(file);
+          // Throws when the thumbnail cannot be generated. The signal aborts when this image
+          // unmounts (e.g. scrolled out of view), which frees its spot in the generation queue.
+          await imageLoader.ensureThumbnail(file, signal);
           return getThumbnail(file);
         } else {
           const src = await imageLoader.getImageSrc(file);

@@ -8,7 +8,8 @@ export type Poll<T> = { tag: 'ready'; value: T } | { tag: 'pending' };
 export const createPending = <T>(): Poll<T> => ({ tag: 'pending' });
 export const createReady = <T>(value: T): Poll<T> => ({ tag: 'ready', value });
 
-export type Query<S extends any[], T> = (...args: [...S]) => Promise<T>;
+/** Receives the sources, followed by a signal that aborts when they change or the component unmounts */
+export type Query<S extends any[], T> = (...args: [...S, AbortSignal]) => Promise<T>;
 
 export function usePromise<T, E, S extends any[]>(
   ...args: [...S, Query<S, T>]
@@ -19,7 +20,8 @@ export function usePromise<T, E, S extends any[]>(
 
   useEffect(() => {
     let isEffectRunning = true;
-    const promise = fetch.current.apply(null, sources);
+    const abortController = new AbortController();
+    const promise = fetch.current(...sources, abortController.signal);
     promise
       .then((value: T) => {
         if (isEffectRunning) {
@@ -41,6 +43,7 @@ export function usePromise<T, E, S extends any[]>(
 
     return () => {
       isEffectRunning = false;
+      abortController.abort();
       cancelAnimationFrame(handle);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

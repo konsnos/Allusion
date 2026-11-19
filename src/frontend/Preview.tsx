@@ -7,13 +7,9 @@ import { Toolbar, ToolbarButton } from 'widgets/toolbar';
 import ContentView from './containers/ContentView';
 import ErrorBoundary from './containers/ErrorBoundary';
 import { useStore } from './contexts/StoreContext';
-import { useWorkerListener } from './image/ThumbnailGeneration';
 
 const PreviewApp = observer(() => {
   const { uiStore, fileStore } = useStore();
-
-  // Listen to responses of Web Workers
-  useWorkerListener();
 
   useEffect(() => uiStore.enableSlideMode(), [uiStore]);
 

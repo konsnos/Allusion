@@ -1,145 +1,154 @@
 import fse from 'fs-extra';
-import { action } from 'mobx';
 import path from 'path';
-import { useEffect } from 'react';
 
+import { clamp } from 'common/core';
 import { thumbnailFormat } from 'common/config';
-import { ID } from '../../api/id';
 import { ClientFile } from '../entities/File';
 import { encodeFilePath, isFileExtensionVideo } from 'common/fs';
+import { TaskQueue } from './TaskQueue';
 
 export interface IThumbnailMessage {
+  jobId: number;
   filePath: string;
-  fileId: ID;
   thumbnailFilePath: string;
   thumbnailFormat: string;
   imageBitmap?: ImageBitmap;
 }
 
 export interface IThumbnailMessageResponse {
-  fileId: ID;
-  thumbnailPath: string;
+  jobId: number;
+  success: boolean;
+  error?: string;
 }
 
 // TODO: Look into NativeImage operators: https://www.electronjs.org/docs/api/native-image#imageresizeoptions
 
-// Set up multiple workers for max performance
-const NUM_THUMBNAIL_WORKERS = 4;
-const workers: Worker[] = [];
-for (let i = 0; i < NUM_THUMBNAIL_WORKERS; i++) {
-  workers[i] = new Worker(
-    new URL('src/frontend/workers/thumbnailGenerator.worker', import.meta.url),
-  );
+/**
+ * Each worker generates one thumbnail at a time: decoding happens on the worker's own thread,
+ * so several jobs per worker do not run in parallel. Measured on a 16-thread machine, 8
+ * single-job workers generated thumbnails ~40% faster than the previous 4 workers x 4 jobs.
+ * Capped at 8 because every job holds a fully decoded image (~100 MB for 25 megapixels).
+ */
+const NUM_THUMBNAIL_WORKERS = clamp(Math.floor((navigator.hardwareConcurrency || 4) / 2), 2, 8);
+
+/** A worker that has not answered after this long is considered hung and gets replaced */
+const JOB_TIMEOUT = 60_000;
+/** Getting a frame out of a video happens on the main thread, which can stall on broken files */
+const VIDEO_FRAME_TIMEOUT = 15_000;
+
+class ThumbnailWorker {
+  private worker: Worker;
+  private job?: {
+    id: number;
+    resolve: () => void;
+    reject: (err: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  };
+
+  constructor() {
+    this.worker = this.spawn();
+  }
+
+  run(msg: IThumbnailMessage, transfer: Transferable[] = []): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.worker.terminate();
+        this.worker = this.spawn();
+        this.settle(new Error(`Thumbnail generation timed out for ${msg.filePath}`));
+      }, JOB_TIMEOUT);
+      this.job = { id: msg.jobId, resolve, reject, timer };
+      this.worker.postMessage(msg, transfer);
+    });
+  }
+
+  private spawn(): Worker {
+    const worker = new Worker(
+      new URL('src/frontend/workers/thumbnailGenerator.worker', import.meta.url),
+    );
+    worker.onmessage = ({ data }: MessageEvent<IThumbnailMessageResponse>) => {
+      if (data.jobId === this.job?.id) {
+        this.settle(data.success ? undefined : new Error(data.error));
+      }
+    };
+    worker.onerror = (e) => {
+      console.error('Thumbnail worker error', e);
+      this.settle(new Error(e.message || 'Thumbnail worker error'));
+    };
+    return worker;
+  }
+
+  private settle(err?: Error) {
+    const job = this.job;
+    if (job === undefined) {
+      return;
+    }
+    this.job = undefined;
+    clearTimeout(job.timer);
+    err === undefined ? job.resolve() : job.reject(err);
+  }
 }
 
-let lastSubmittedWorker = 0;
-
-type Callback = (success: boolean) => void;
-/** A map of File ID and a callback function for when thumbnail generation is finished or has failed */
-const listeners = new Map<ID, Callback[]>();
+// Workers are created when first needed. The queue never runs more jobs than there are workers,
+// so a running job always finds an idle one.
+const idleWorkers: ThumbnailWorker[] = [];
+const queue = new TaskQueue<void>(NUM_THUMBNAIL_WORKERS);
+let nextJobId = 0;
 
 /**
  * Generates a thumbnail in a Worker: {@link ../workers/thumbnailGenerator.worker}
- * When the worker is finished, the file.thumbnailPath will be updated with ?v=1,
- * causing the image to update in the view where ever it is used
+ *
+ * Requests run in the order they arrive, and a request for a thumbnail that is already queued or
+ * being generated joins that one. Aborting `signal` (e.g. when the image scrolls out of view)
+ * takes the request out of the queue if it has not started yet.
+ *
+ * @throws When the thumbnail could not be generated, or with an AbortError when aborted
  **/
-export const generateThumbnailUsingWorker = action(
-  async (file: ClientFile, thumbnailFilePath: string, timeoutReject = true, timeout = 10000) => {
-    const msg: IThumbnailMessage = {
-      filePath: file.absolutePath,
-      thumbnailFilePath,
-      thumbnailFormat,
-      fileId: file.id,
-    };
-
-    return new Promise<void>((resolve, reject) => {
-      setTimeout(() => {
-        if (listeners.has(msg.fileId)) {
-          // Remove the image from the queue when timeout occurs
-          workers[lastSubmittedWorker].postMessage({
-            type: 'cancel',
-            fileId: msg.fileId,
-          });
-          timeoutReject ? reject() : resolve();
-          listeners.delete(msg.fileId);
-          //console.debug(`timeout: unable to generate thumbnail for ${file.name}, retrying: ${!timeoutReject}`);
-        }
-      }, timeout);
-
-      // Might already be in progress if called earlier
-      const existingListeners = listeners.get(file.id);
-      if (existingListeners) {
-        existingListeners.push((success) => (success ? resolve() : reject()));
-        return;
-      }
-
-      // Otherwise, create a new listener and submit to a worker
-      listeners.set(msg.fileId, [(success) => (success ? resolve() : reject())]);
-      if (isFileExtensionVideo(file.extension)) {
-        // get a frame bitmap using a <video> element and let it handle the video and the decoding.
-        // we do this in the main thread and send the ImageBitmap to the worker since workers cannot create DOM elements
-        // Todo: it would be more perfomant to do the whole decoding in the worker but that will need a more complex implementation.
-        generateVideoThumbnailBitmap(file.absolutePath)
-          .then((bitmap) => {
-            msg.imageBitmap = bitmap;
-            workers[lastSubmittedWorker].postMessage(msg, [bitmap]);
-            lastSubmittedWorker = (lastSubmittedWorker + 1) % workers.length;
-          })
-          .catch((err) => {
-            console.error(err);
-            reject(err);
-          });
-      } else {
-        workers[lastSubmittedWorker].postMessage(msg);
-        lastSubmittedWorker = (lastSubmittedWorker + 1) % workers.length;
-      }
-    });
-  },
-);
-
-/**
- * Listens and processes events from the Workers. Should only be used once in the entire app
- * TODO: no need for this to be a hook anymore, should just make a class out of it
- */
-export const useWorkerListener = () => {
-  useEffect(() => {
-    for (let i = 0; i < workers.length; i++) {
-      workers[i].onmessage = (e: { data: IThumbnailMessageResponse }) => {
-        const { fileId } = e.data;
-
-        const callbacks = listeners.get(fileId);
-        if (callbacks) {
-          callbacks.forEach((cb) => cb(true));
-          listeners.delete(fileId);
-        } else {
-          console.debug(
-            'No callbacks found for fileId after successful thumbnail creation:',
-            fileId,
-            'Might have timed out',
+export function generateThumbnailUsingWorker(
+  file: ClientFile,
+  thumbnailFilePath: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { absolutePath, extension } = file;
+  return queue.run(
+    thumbnailFilePath,
+    async () => {
+      const worker = idleWorkers.pop() ?? new ThumbnailWorker();
+      try {
+        const msg: IThumbnailMessage = {
+          jobId: nextJobId++,
+          filePath: absolutePath,
+          thumbnailFilePath,
+          thumbnailFormat,
+        };
+        if (isFileExtensionVideo(extension)) {
+          // get a frame bitmap using a <video> element and let it handle the video and the decoding.
+          // we do this in the main thread and send the ImageBitmap to the worker since workers cannot create DOM elements
+          // Todo: it would be more perfomant to do the whole decoding in the worker but that will need a more complex implementation.
+          const bitmap = await withTimeout(
+            generateVideoThumbnailBitmap(absolutePath),
+            VIDEO_FRAME_TIMEOUT,
+            `Timed out reading a frame of ${absolutePath}`,
           );
-        }
-      };
-
-      workers[i].onerror = (err) => {
-        console.error('Could not generate thumbnail', `worker ${i}`, err);
-        const fileId = err.message;
-
-        const callbacks = listeners.get(fileId);
-        if (callbacks) {
-          callbacks.forEach((cb) => cb(false));
-          listeners.delete(fileId);
+          msg.imageBitmap = bitmap;
+          await worker.run(msg, [bitmap]);
         } else {
-          console.debug(
-            'No callbacks found for fileId after unsuccessful thumbnail creation:',
-            fileId,
-            'Might have timed out',
-          );
+          await worker.run(msg);
         }
-      };
-    }
-    return () => workers.forEach((worker) => worker.terminate());
-  }, []);
-};
+      } finally {
+        idleWorkers.push(worker);
+      }
+    },
+    signal,
+  );
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 // Moves all thumbnail files from one directory to another
 export const moveThumbnailDir = async (sourceDir: string, targetDir: string) => {

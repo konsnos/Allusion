@@ -10,7 +10,6 @@ import { AppToaster, Toaster as CustomToaster } from './components/Toaster';
 import AdvancedSearchDialog from './containers/AdvancedSearch';
 import Settings from './containers/Settings';
 
-import { useWorkerListener } from './image/ThumbnailGeneration';
 import WindowTitlebar from './containers/WindowTitlebar';
 import { DropContextProvider } from './contexts/DropContext';
 import Main from './containers/Main';
@@ -24,8 +23,6 @@ const PLATFORM = process.platform;
 const App = observer(() => {
   const { uiStore } = useStore();
 
-  // Listen to responses of Web Workers
-  useWorkerListener();
   useClipboardImporter(uiStore);
 
   const isOutlinerOpen = uiStore.isOutlinerOpen;

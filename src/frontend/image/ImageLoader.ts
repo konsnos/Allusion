@@ -67,9 +67,14 @@ class ImageLoader {
     await Promise.all([this.tifLoader.init(), this.exrLoader.init(), this.psdLoader.init()]);
   }
 
-  needsThumbnail(file: FileDTO) {
+  /** Whether a file is shown through a generated thumbnail, instead of directly from its own path */
+  needsThumbnail(file: Pick<FileDTO, 'extension' | 'width' | 'height'>) {
+    const handler = FormatHandlers[file.extension];
+    if (handler === 'none') {
+      return false;
+    }
     return (
-      FormatHandlers[file.extension] !== 'web' ||
+      handler !== 'web' ||
       file.width > thumbnailMaxSize ||
       file.height > thumbnailMaxSize ||
       //always make thumbnail for gifs and videos to use when not playing
@@ -80,25 +85,32 @@ class ImageLoader {
 
   /**
    * Ensures a thumbnail exists, will return instantly if already exists.
+   * Updating the file's thumbnail path afterwards re-renders the image wherever it is shown.
    * @param file The file to generate a thumbnail for
+   * @param signal Aborting it (e.g. when the image is no longer shown) cancels the request if
+   * generation has not started yet
    * @returns Whether a thumbnail had to be generated
-   * @throws When a thumbnail does not exist and cannot be generated
+   * @throws When a thumbnail does not exist and cannot be generated, or with an AbortError when aborted
    */
-  async ensureThumbnail(file: ClientFile): Promise<boolean> {
-    const { extension, absolutePath, thumbnailPath } = {
-      extension: file.extension,
-      absolutePath: file.absolutePath,
-      // remove ?v=1 that might have been added after the thumbnail was generated earlier
-      thumbnailPath: file.thumbnailPath.split('?')[0],
-    };
+  async ensureThumbnail(file: ClientFile, signal?: AbortSignal): Promise<boolean> {
+    // Files that are shown directly (e.g. small web images) use their own path as thumbnail path.
+    // Never "generate" those: bumping the path would re-render and call this again, forever.
+    if (!this.needsThumbnail(file)) {
+      return false;
+    }
+    const { extension, absolutePath } = file;
+    // remove ?v=1 that might have been added after the thumbnail was generated earlier
+    const thumbnailPath = file.thumbnailPath.split('?')[0];
 
-    if (await fse.pathExists(thumbnailPath)) {
-      // Files like PSDs have a tendency to change: Check if thumbnail needs an update
-      const fileStats = await fse.stat(absolutePath);
-      const thumbStats = await fse.stat(thumbnailPath);
-      // if file mod date is before thumbnail creation date, keep using the same thumbnail
-      // sometimes files like psd have wrong modified date, like a mtime in the future, which causes an infinite loop of re-render thumbnails
-      if (fileStats.mtime < thumbStats.ctime || fileStats.mtime.getTime() > Date.now()) {
+    const thumbStats = await statIfExists(thumbnailPath);
+    if (thumbStats !== undefined) {
+      // Files like PSDs have a tendency to change: Check if thumbnail needs an update.
+      // Compare with the thumbnail's mtime, when it was written. Its ctime is not a creation time:
+      // depending on the OS and file system it can equal the mtime or predate it.
+      const fileMtime = (await fse.stat(absolutePath)).mtimeMs;
+      // Some files (e.g. PSDs) have an mtime in the future. Regenerating would not fix that, and
+      // would happen again on every render.
+      if (fileMtime <= thumbStats.mtimeMs || fileMtime > Date.now()) {
         return false;
       }
     }
@@ -106,19 +118,27 @@ class ImageLoader {
     const handlerType = FormatHandlers[extension];
     switch (handlerType) {
       case 'web':
-        // If the third argument of `generateThumbnailUsingWorker`, "timeoutReject", is set to true,
-        // it will cause a reject/throw and return an error inside the imageSource promise when the timeout finishes.
-        // If it is set to false, it will resolve the await, causing a "retry-like" behavior by triggering a rerender
-        // and calling `updateThumbnailPath` after each timeout until the thumbnail is generated.
-        await generateThumbnailUsingWorker(file, thumbnailPath, false);
+        await generateThumbnailUsingWorker(file, thumbnailPath, signal);
         updateThumbnailPath(file, thumbnailPath);
         break;
       case 'tifLoader':
-        await generateThumbnail(this.tifLoader, absolutePath, thumbnailPath, thumbnailMaxSize);
+        await generateThumbnail(
+          this.tifLoader,
+          absolutePath,
+          thumbnailPath,
+          thumbnailMaxSize,
+          signal,
+        );
         updateThumbnailPath(file, thumbnailPath);
         break;
       case 'exrLoader':
-        await generateThumbnail(this.exrLoader, absolutePath, thumbnailPath, thumbnailMaxSize);
+        await generateThumbnail(
+          this.exrLoader,
+          absolutePath,
+          thumbnailPath,
+          thumbnailMaxSize,
+          signal,
+        );
         updateThumbnailPath(file, thumbnailPath);
         break;
       case 'extractEmbeddedThumbnailOnly':
@@ -138,13 +158,18 @@ class ImageLoader {
         }
         break;
       case 'psdLoader':
-        await generateThumbnail(this.psdLoader, absolutePath, thumbnailPath, thumbnailMaxSize);
+        await generateThumbnail(
+          this.psdLoader,
+          absolutePath,
+          thumbnailPath,
+          thumbnailMaxSize,
+          signal,
+        );
         updateThumbnailPath(file, thumbnailPath);
         break;
       case 'none':
-        // No thumbnail for this format
-        file.setThumbnailPath(file.absolutePath);
-        break;
+        // No thumbnail for this format: not reached, since needsThumbnail() is false for it
+        return false;
       default:
         console.warn('Unsupported extension', file.absolutePath, file.extension);
         throw new Error('Unsupported extension ' + file.absolutePath);
@@ -301,6 +326,17 @@ export default ImageLoader;
 const updateThumbnailPath = action((file: ClientFile, thumbnailPath: string) => {
   file.setThumbnailPath(thumbnailPath);
 });
+
+async function statIfExists(filePath: string): Promise<fse.Stats | undefined> {
+  try {
+    return await fse.stat(filePath);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined;
+    }
+    throw e;
+  }
+}
 
 function extractAttribute(xml: string, tag: string, attr: string): string | null {
   const regex = new RegExp(`<${tag}[^>]*\\b${attr}="(\\d+)"`);

@@ -1,6 +1,7 @@
 import { clamp } from 'common/core';
 import fse from 'fs-extra';
 import { thumbnailFormat } from 'common/config';
+import { TaskQueue } from './TaskQueue';
 
 export interface Loader extends Decoder {
   init: () => Promise<void>;
@@ -24,28 +25,37 @@ export async function getBlob(decoder: Decoder, path: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
-const processingPaths = new Set<string>();
-const MAX_CONCURRENT_PATHS = 4;
-const RETRY_DELAY = 10000;
-const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+/**
+ * These decoders hold the full-resolution image on the main thread (TIFF and EXR also decode there),
+ * so only a couple run at once: more would only add memory pressure and UI stutter.
+ */
+const loaderQueue = new TaskQueue<void>(2);
 
-export async function generateThumbnail(
+/**
+ * Generates a thumbnail with one of the custom decoders. Requests queue up first-in first-out,
+ * and a request for a thumbnail that is already queued or being generated joins that one.
+ * Aborting `signal` takes the request out of the queue if it has not started yet.
+ */
+export function generateThumbnail(
+  decoder: Decoder,
+  inputPath: string,
+  outputPath: string,
+  thumbnailSize: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  return loaderQueue.run(
+    outputPath,
+    () => generateThumbnailNow(decoder, inputPath, outputPath, thumbnailSize),
+    signal,
+  );
+}
+
+async function generateThumbnailNow(
   decoder: Decoder,
   inputPath: string,
   outputPath: string,
   thumbnailSize: number,
 ): Promise<void> {
-  if (processingPaths.has(inputPath)) {
-    console.debug(`Thumbnail generation already in progress for ${inputPath} Waiting ${RETRY_DELAY}ms`);
-    return await delay(RETRY_DELAY);
-  }
-  if (processingPaths.size >= MAX_CONCURRENT_PATHS) {
-    console.debug(`Max concurrent paths limit reached: ${processingPaths.size}/${MAX_CONCURRENT_PATHS}. Waiting ${RETRY_DELAY}ms`);
-    return await delay(RETRY_DELAY);
-  }
-
-  console.debug(`Adding ${inputPath} to processingPaths. Current size: ${processingPaths.size + 1}`);
-  processingPaths.add(inputPath);
   // TODO: merge this functionality with the thumbnail worker: it's basically duplicate code
   let buffer: Buffer | null = await fse.readFile(inputPath);
   let data: ImageData | null = await decoder.decode(buffer);
@@ -69,8 +79,6 @@ export async function generateThumbnail(
 
   await fse.outputFile(outputPath, Buffer.from(blobBuffer));
   blobBuffer = null;
-  console.debug(`Finished generating thumbnail for ${inputPath}, removing from processingPaths.`);
-  processingPaths.delete(inputPath);
 }
 
 function dataToCanvas(data: ImageData): HTMLCanvasElement {
