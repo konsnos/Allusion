@@ -9,7 +9,7 @@ Fork of [RafaUC/Allusion](https://github.com/RafaUC/Allusion), itself a fork of 
 
 Allusion now runs on 64-bit Windows 10 or later, macOS 13 or later, and 64-bit Linux. On first start, it moves the library database from the `databases` folder to `allusion-db` in its data folder.
 
-Adding a location is also much faster. Allusion used to read every image in full through ExifTool, one at a time, just to get its width and height. It now reads the dimensions from the file header for PNG, JPEG, GIF, WebP, BMP and PSD files, and asks ExifTool to stop early for other formats. Reading image dimensions takes about 1.3 ms per file instead of 29 ms, so a folder of 60,000 images (34.5 GB) loads in a couple of minutes instead of about half an hour. Files without an extension are no longer imported.
+Adding a location is also much faster. Reading image dimensions takes about 1.3 ms per file instead of 29 ms, so a folder of 60,000 images (34.5 GB) loads in a couple of minutes instead of about half an hour.
         
 Thanks to the developers and the community for your hard work! ❤️
 
