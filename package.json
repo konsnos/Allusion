@@ -1,7 +1,7 @@
 {
   "name": "allusion",
   "productName": "Allusion",
-  "version": "1.14.0-konsnos",
+  "version": "1.14.1-konsnos",
   "description": "A tool for managing your visual library",
   "main": "build/main.bundle.js",
   "scripts": {
