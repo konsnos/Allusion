@@ -31,8 +31,12 @@ jobs:
           node-version: 22
           cache: yarn
 
+      # --ignore-scripts: Yarn v1 ignores better-sqlite3's "gypfile": false and runs
+      # `node-gyp rebuild`, which fails on runners whose Visual Studio is newer than the
+      # node-gyp bundled with npm (windows-latest ships VS 2026). The compiled output is
+      # unused anyway: better-sqlite3 loads its bundled prebuilds, and those are what we package.
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --ignore-scripts
 
       - name: Build app
         run: yarn build
