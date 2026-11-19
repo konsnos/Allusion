@@ -1,7 +1,7 @@
 {
   "name": "allusion",
   "productName": "Allusion",
-  "version": "1.14.1-konsnos",
+  "version": "1.14.2-konsnos",
   "description": "A tool for managing your visual library",
   "main": "build/main.bundle.js",
   "scripts": {
@@ -77,12 +77,10 @@
       "node_modules/picomatch/**/*",
       "node_modules/node-addon-api/**/*",
       "node_modules/is-extglob/**/*",
-
       "node_modules/better-sqlite3/package.json",
       "node_modules/better-sqlite3/LICENSE",
       "node_modules/better-sqlite3/lib/**/*",
       "node_modules/better-sqlite3/prebuilds/${platform}-${arch}.node",
-
       "build/**/*",
       "package.json"
     ],
