@@ -45,8 +45,10 @@
 import fse from 'fs-extra';
 import { action, makeObservable, observable, runInAction } from 'mobx';
 import exiftool from 'node-exiftool';
+import SysPath from 'path';
+import { IMG_EXTENSIONS_TYPE } from 'src/api/file';
 import { IS_WIN } from './process';
-import { getExtraResourcePath } from './fs';
+import { getExtraResourcePath, isFileExtensionVideo } from './fs';
 
 // The exif binary is placed using ElectronBuilder's extraResources:
 const exiftoolRunnable = IS_WIN ? 'exiftool.exe' : 'exiftool.pl';
@@ -369,9 +371,28 @@ class ExifIO {
    * @returns The width and height of the image, or width and height as 0 if the resolution could not be determined.
    */
   async getDimensions(filepath: string): Promise<{ width: number; height: number }> {
+    // By default ExifTool reads whole files (e.g. every chunk of a PNG), which makes importing
+    // large images very slow. -fast2 stops at the image data of PNGs and skips maker notes.
+    // It would also stop at the media data of videos, missing dimensions stored after it, so
+    // videos get -fast, which only skips scanning for trailers.
+    const extension = SysPath.extname(filepath).slice(1).toLowerCase() as IMG_EXTENSIONS_TYPE;
+    const fastArg = isFileExtensionVideo(extension) ? 'fast' : 'fast2';
+    const dimensions = await this.readDimensions(filepath, [fastArg]);
+    if (dimensions.width && dimensions.height) {
+      return dimensions;
+    }
+    // Some files store their metadata after the image data
+    return this.readDimensions(filepath, []);
+  }
+
+  private async readDimensions(
+    filepath: string,
+    args: string[],
+  ): Promise<{ width: number; height: number }> {
     let metadata: Awaited<ReturnType<typeof ep.readMetadata>> | undefined = undefined;
     try {
       metadata = await ep.readMetadata(filepath, [
+        ...args,
         's3',
         'ImageWidth',
         'ImageHeight',

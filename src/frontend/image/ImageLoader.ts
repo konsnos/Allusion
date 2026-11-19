@@ -4,6 +4,7 @@ import StreamZip from 'node-stream-zip';
 
 import ExifIO from 'common/ExifIO';
 import { thumbnailMaxSize } from 'common/config';
+import { canReadDimensionsFromHeader, readImageHeaderDimensions } from 'common/imageHeader';
 import { FileDTO, IMG_EXTENSIONS_TYPE } from '../../api/file';
 import { ClientFile } from '../entities/File';
 import ExrLoader from './ExrLoader';
@@ -195,6 +196,14 @@ class ImageLoader {
 
   /** Returns 0 for width and height if they can't be determined */
   async getImageResolution(absolutePath: string): Promise<{ width: number; height: number }> {
+    // Reading the header ourselves is much faster than ExifTool, and runs in parallel
+    if (canReadDimensionsFromHeader(absolutePath)) {
+      const headerDimensions = await readImageHeaderDimensions(absolutePath);
+      if (headerDimensions !== undefined) {
+        return headerDimensions;
+      }
+    }
+
     // ExifTool should be able to read the resolution from any image file
     const dimensions = await this.exifIO.getDimensions(absolutePath);
 

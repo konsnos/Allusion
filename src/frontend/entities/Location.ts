@@ -428,11 +428,11 @@ export class ClientLocation {
       if (basename.startsWith('.')) {
         return true;
       }
-      // If the path doesn't have an extension (likely a directory), don't ignore it.
-      // In the unlikely situation it is a file, we'll filter it out later in the .on('add', ...)
+      // A path without an extension is kept only if it is a directory: files without one
+      // (LICENSE, Makefile, ...) are not images
       const ext = SysPath.extname(path).toLowerCase().split('.')[1];
       if (!ext) {
-        return false;
+        return dirent !== undefined && !dirent.isDirectory();
       }
       // If the path (file or directory) ends with an image extension, don't ignore it.
       if (extensions.includes(ext as IMG_EXTENSIONS_TYPE)) {
